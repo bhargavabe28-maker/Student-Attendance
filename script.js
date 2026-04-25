@@ -4,22 +4,35 @@
 
 class AttendanceApp {
     constructor() {
+        this.users = JSON.parse(localStorage.getItem('att_users')) || {};
+        this.currentUser = localStorage.getItem('att_current_user') || null;
+        
         this.data = {
-            profile: JSON.parse(localStorage.getItem('att_profile')) || {
-                name: 'Alex Johnson',
-                roll: 'STU12345',
-                dept: 'Computer Science',
-                year: '3rd Year',
+            profile: {
+                name: 'Batch 1 Student',
+                roll: '100524733006',
+                dept: 'B.E (CSE) IV-Semester',
+                college: 'Osmania University',
                 targetPct: 75
             },
-            subjects: JSON.parse(localStorage.getItem('att_subjects')) || [
-                { id: '1', name: 'Data Structures', faculty: 'Dr. Smith', attended: 28, total: 32 },
-                { id: '2', name: 'Web Development', faculty: 'Prof. Miller', attended: 15, total: 20 },
-                { id: '3', name: 'Database Systems', faculty: 'Dr. Brown', attended: 10, total: 18 }
+            subjects: [
+                { id: '1', name: 'Engineering Mathematics - IV', faculty: 'Dr. Kamalapurkar', attended: 0, total: 0 },
+                { id: '2', name: 'Automata Languages & Computation', faculty: 'Dr. Ch. Rathaiah Kumar', attended: 0, total: 0 },
+                { id: '3', name: 'Design & Analysis of Algorithms', faculty: 'Mr. D. Sai Kumar', attended: 0, total: 0 },
+                { id: '4', name: 'Operating Systems', faculty: 'Mrs. E. Pragnavi', attended: 0, total: 0 },
+                { id: '5', name: 'Managerial Economics & Accountancy', faculty: 'Dr. R. Seetharama Rao', attended: 0, total: 0 },
+                { id: '6', name: 'Signals and Systems', faculty: 'Dr. B. Ramesh', attended: 0, total: 0 },
+                { id: '7', name: 'Data Analytics using R', faculty: 'Prof. K. Shyamala', attended: 0, total: 0 },
+                { id: '8', name: 'DAA Lab (Batch-I)', faculty: 'Dr. B. Sujatha', attended: 0, total: 0 },
+                { id: '9', name: 'OS Lab (Batch-I)', faculty: 'Mrs. E. Pragnavi', attended: 0, total: 0 }
             ],
-            history: JSON.parse(localStorage.getItem('att_history')) || {},
+            history: {},
             theme: localStorage.getItem('att_theme') || 'light'
         };
+
+        if (this.currentUser && this.users[this.currentUser]) {
+            this.data = { ...this.data, ...this.users[this.currentUser].data };
+        }
 
         this.currentSection = 'dashboard';
         this.currentDate = new Date();
@@ -27,16 +40,25 @@ class AttendanceApp {
         this.calendarYear = new Date().getFullYear();
         this.charts = {};
 
-        this.init();
+        try {
+            this.init();
+        } catch (error) {
+            console.error('App initialization failed:', error);
+        }
     }
 
     init() {
         this.applyTheme();
         this.setupEventListeners();
-        this.updateProfileDisplay();
-        this.renderDashboard();
-        this.updateDateDisplay();
-        this.initCalendar();
+        
+        if (this.currentUser) {
+            this.closeModal('login-overlay');
+            this.updateProfileDisplay();
+            this.renderDashboard();
+            this.updateDateDisplay();
+            this.initCalendar();
+            console.log('App initialized for:', this.currentUser);
+        }
     }
 
     setupEventListeners() {
@@ -49,12 +71,62 @@ class AttendanceApp {
             });
         });
 
-        // Login Demo
-        document.getElementById('login-form').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.closeModal('login-overlay');
-            this.showNotification('Welcome, ' + this.data.profile.name + '!', 'success');
-        });
+        // Login Handler
+        const loginForm = document.getElementById('login-form');
+        if (loginForm) {
+            loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const user = document.getElementById('login-user').value;
+                const pass = document.getElementById('login-pass').value;
+                
+                if (this.users[user] && this.users[user].password === pass) {
+                    this.currentUser = user;
+                    localStorage.setItem('att_current_user', user);
+                    this.data.profile = { ...this.data.profile, ...this.users[user].data.profile };
+                    this.data.subjects = this.users[user].data.subjects;
+                    this.data.history = this.users[user].data.history;
+                    
+                    this.closeModal('login-overlay');
+                    this.updateProfileDisplay();
+                    this.renderDashboard();
+                    this.updateDateDisplay();
+                    this.initCalendar();
+                    this.showNotification('Welcome back, ' + this.data.profile.name + '!', 'success');
+                } else {
+                    this.showNotification('Invalid username or password!', 'error');
+                }
+            });
+        }
+
+        // Register Handler
+        const regForm = document.getElementById('register-form');
+        if (regForm) {
+            regForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const name = document.getElementById('reg-name').value;
+                const user = document.getElementById('reg-user').value;
+                const pass = document.getElementById('reg-pass').value;
+
+                if (this.users[user]) {
+                    this.showNotification('Username already exists!', 'error');
+                    return;
+                }
+
+                // Create new user with default subjects
+                this.users[user] = {
+                    password: pass,
+                    data: {
+                        profile: { ...this.data.profile, name: name, roll: user },
+                        subjects: [...this.data.subjects],
+                        history: {}
+                    }
+                };
+                
+                this.saveData();
+                this.showNotification('Account created! Please login.', 'success');
+                this.toggleAuthView('login');
+            });
+        }
 
         // Profile Form
         document.getElementById('profile-form').addEventListener('submit', (e) => {
@@ -64,6 +136,7 @@ class AttendanceApp {
                 name: formData.get('name'),
                 roll: formData.get('roll'),
                 dept: formData.get('dept'),
+                college: formData.get('college'),
                 targetPct: parseFloat(formData.get('targetPct')) || 75
             };
             this.saveData();
@@ -88,7 +161,8 @@ class AttendanceApp {
         // Logout
         document.getElementById('logout-btn').addEventListener('click', (e) => {
             e.preventDefault();
-            if(confirm('Are you sure you want to logout?')) {
+            if (confirm('Are you sure you want to logout?')) {
+                localStorage.removeItem('att_current_user');
                 location.reload();
             }
         });
@@ -97,21 +171,52 @@ class AttendanceApp {
     // --- Core Logic ---
 
     saveData() {
-        localStorage.setItem('att_profile', JSON.stringify(this.data.profile));
-        localStorage.setItem('att_subjects', JSON.stringify(this.data.subjects));
-        localStorage.setItem('att_history', JSON.stringify(this.data.history));
+        if (this.currentUser) {
+            this.users[this.currentUser].data = {
+                profile: this.data.profile,
+                subjects: this.data.subjects,
+                history: this.data.history
+            };
+        }
+        localStorage.setItem('att_users', JSON.stringify(this.users));
+        localStorage.setItem('att_current_user', this.currentUser);
         localStorage.setItem('att_theme', this.data.theme);
+    }
+
+    toggleAuthView(view) {
+        if (view === 'register') {
+            document.getElementById('login-view').style.display = 'none';
+            document.getElementById('register-view').style.display = 'block';
+        } else {
+            document.getElementById('login-view').style.display = 'block';
+            document.getElementById('register-view').style.display = 'none';
+        }
+    }
+
+    refreshIcons() {
+        try {
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        } catch (e) {
+            console.warn('Lucide icons failed to load:', e);
+        }
     }
 
     applyTheme() {
         document.documentElement.setAttribute('data-theme', this.data.theme);
-        const icon = document.getElementById('theme-toggle').querySelector('i');
-        if (this.data.theme === 'dark') {
-            icon.setAttribute('data-lucide', 'sun');
-        } else {
-            icon.setAttribute('data-lucide', 'moon');
+        const themeBtn = document.getElementById('theme-toggle');
+        if (themeBtn) {
+            const icon = themeBtn.querySelector('i');
+            if (icon) {
+                if (this.data.theme === 'dark') {
+                    icon.setAttribute('data-lucide', 'sun');
+                } else {
+                    icon.setAttribute('data-lucide', 'moon');
+                }
+            }
         }
-        lucide.createIcons();
+        this.refreshIcons();
     }
 
     switchSection(sectionId) {
@@ -120,7 +225,7 @@ class AttendanceApp {
         if (target) {
             target.style.display = 'block';
             this.currentSection = sectionId;
-            
+
             // Update nav active state
             document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
             document.querySelector(`.nav-item[data-section="${sectionId}"]`)?.classList.add('active');
@@ -129,6 +234,7 @@ class AttendanceApp {
             if (sectionId === 'subjects') this.renderManageSubjects();
             if (sectionId === 'reports') this.renderReports();
             if (sectionId === 'profile') this.fillProfileForm();
+            if (sectionId === 'calendar') this.renderCalendar();
         }
     }
 
@@ -150,7 +256,8 @@ class AttendanceApp {
             totalAttended += parseInt(s.attended || 0);
             totalClasses += parseInt(s.total || 0);
             const pct = s.total > 0 ? (s.attended / s.total) * 100 : 0;
-            if (pct < this.data.profile.targetPct) shortageCount++;
+            const target = this.data.profile.targetPct || 75;
+            if (pct < target) shortageCount++;
         });
 
         const overallPct = totalClasses > 0 ? (totalAttended / totalClasses) * 100 : 0;
@@ -159,11 +266,11 @@ class AttendanceApp {
         document.getElementById('total-subjects-count').textContent = totalSubjects;
         document.getElementById('total-attended').textContent = totalAttended;
         document.getElementById('total-missed-label').textContent = `${totalClasses - totalAttended} Missed`;
-        
+
         const shortageEl = document.getElementById('shortage-count');
         shortageEl.textContent = shortageCount > 0 ? `${shortageCount} Critical` : 'None';
         shortageEl.style.color = shortageCount > 0 ? 'var(--danger)' : 'var(--success)';
-        
+
         const trendEl = document.querySelector('.stat-card .stat-trend');
         if (overallPct >= this.data.profile.targetPct) {
             trendEl.className = 'stat-trend trend-up';
@@ -172,7 +279,7 @@ class AttendanceApp {
             trendEl.className = 'stat-trend trend-down';
             trendEl.innerHTML = '<i data-lucide="trending-down"></i> <span>Below target</span>';
         }
-        lucide.createIcons();
+        this.refreshIcons();
     }
 
     renderSubjectCards(containerId, isDashboard = false) {
@@ -184,15 +291,16 @@ class AttendanceApp {
                 <i data-lucide="book-open" style="width: 48px; height: 48px; margin-bottom: 1rem;"></i>
                 <p>No subjects added yet. Start by adding one!</p>
             </div>`;
-            lucide.createIcons();
+            this.refreshIcons();
             return;
         }
 
         this.data.subjects.forEach(subj => {
             const pct = subj.total > 0 ? (subj.attended / subj.total) * 100 : 0;
             let statusClass = 'success';
-            if (pct < this.data.profile.targetPct) statusClass = 'danger';
-            else if (pct < this.data.profile.targetPct + 5) statusClass = 'warning';
+            const target = this.data.profile.targetPct || 75;
+            if (pct < target) statusClass = 'danger';
+            else if (pct < target + 5) statusClass = 'warning';
 
             const card = document.createElement('div');
             card.className = `subject-card ${statusClass}`;
@@ -223,7 +331,7 @@ class AttendanceApp {
             `;
             container.appendChild(card);
         });
-        lucide.createIcons();
+        this.refreshIcons();
     }
 
     // --- Subjects Management ---
@@ -346,7 +454,7 @@ class AttendanceApp {
 
     updateProfileDisplay() {
         document.getElementById('profile-name-display').textContent = this.data.profile.name;
-        document.getElementById('profile-dept-display').textContent = `${this.data.profile.dept} • ${this.data.profile.roll}`;
+        document.getElementById('profile-dept-display').textContent = `${this.data.profile.dept} • ${this.data.profile.college || 'No College'}`;
         document.getElementById('greeting').textContent = `Hello, ${this.data.profile.name.split(' ')[0]}!`;
     }
 
@@ -354,6 +462,7 @@ class AttendanceApp {
         document.getElementById('prof-name').value = this.data.profile.name;
         document.getElementById('prof-roll').value = this.data.profile.roll;
         document.getElementById('prof-dept').value = this.data.profile.dept;
+        document.getElementById('prof-college').value = this.data.profile.college || '';
         document.getElementById('prof-target').value = this.data.profile.targetPct;
     }
 
@@ -420,7 +529,7 @@ class AttendanceApp {
     renderCalendar() {
         const grid = document.getElementById('calendar-grid');
         const monthYear = document.getElementById('calendar-month-year');
-        
+
         // Clear previous days (keep headers)
         const headers = Array.from(grid.children).slice(0, 7);
         grid.innerHTML = '';
@@ -428,7 +537,7 @@ class AttendanceApp {
 
         const firstDay = new Date(this.calendarYear, this.calendarMonth, 1).getDay();
         const daysInMonth = new Date(this.calendarYear, this.calendarMonth + 1, 0).getDate();
-        
+
         const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
         monthYear.textContent = `${monthNames[this.calendarMonth]} ${this.calendarYear}`;
 
@@ -459,6 +568,7 @@ class AttendanceApp {
             dayEl.onclick = () => this.toggleAttendance(dateStr);
             grid.appendChild(dayEl);
         }
+        this.refreshIcons();
     }
 
     toggleAttendance(dateStr) {
@@ -466,12 +576,13 @@ class AttendanceApp {
         if (!current) this.data.history[dateStr] = 'present';
         else if (current === 'present') this.data.history[dateStr] = 'absent';
         else delete this.data.history[dateStr];
-        
+
         this.saveData();
         this.renderCalendar();
     }
 
     prevMonth() {
+        console.log('Previous month clicked');
         this.calendarMonth--;
         if (this.calendarMonth < 0) {
             this.calendarMonth = 11;
@@ -481,6 +592,7 @@ class AttendanceApp {
     }
 
     nextMonth() {
+        console.log('Next month clicked');
         this.calendarMonth++;
         if (this.calendarMonth > 11) {
             this.calendarMonth = 0;
@@ -513,7 +625,7 @@ class AttendanceApp {
         toast.style.borderRadius = 'var(--radius-md)';
         toast.style.background = type === 'success' ? 'var(--success)' : (type === 'error' ? 'var(--danger)' : 'var(--info)');
         toast.style.color = 'white';
-        toast.style.boxShadow = var(--shadow-lg);
+        toast.style.boxShadow = 'var(--shadow-lg)';
         toast.style.zIndex = '9999';
         toast.style.animation = 'slideIn 0.3s ease-out';
         toast.textContent = msg;
@@ -527,7 +639,7 @@ class AttendanceApp {
 
     exportData() {
         const dataStr = JSON.stringify(this.data);
-        const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+        const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
         const linkElement = document.createElement('a');
         linkElement.setAttribute('href', dataUri);
         linkElement.setAttribute('download', 'attendance_backup.json');
